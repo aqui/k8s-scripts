@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql-test
+  namespace: test
+  labels:
+    app: mysql-test
+    tier: test
+spec:
+  replicas: 1
+  serviceName: mysql-service-test
+  selector:
+    matchLabels:
+      app: mysql-test
+      tier: test
+  template:
+    metadata:
+      labels:
+        app: mysql-test
+        tier: test
+    spec:
+      containers:
+      - name: mysql-test
+        image: mysql:5.6
+        envFrom:
+          - secretRef:
+              name: mysql-secret-test
+        ports:
+        - containerPort: 3306
+        volumeMounts:
+        - name: mysql-data-test
+          mountPath: /var/lib/mysql
+        env:
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret-test
+                  key: MYSQL_PASSWORD
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret-test
+                  key: MYSQL_DATABASE
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret-test
+                  key: MYSQL_ROOT_PASSWORD
+      nodeSelector:
+        tier: test
+      tolerations:
+      - key: "tier"
+        operator: "Equal"
+        value: "test"
+        effect: "NoSchedule"
+      volumes:
+          - name: mysql-data-test
+            persistentVolumeClaim:
+              claimName: mysql-pvc-test
