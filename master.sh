@@ -288,6 +288,13 @@ type: kubernetes.io/service-account-token
 EOF
     kubectl apply -f dashboard-user.yaml
     kubectl get secret admin-user -n kubernetes-dashboard -o jsonpath={".data.token"} | base64 -d
+    kubectl create namespace monitoring
+    helm install my-grafana grafana/grafana --namespace monitoring
+    
+    echo "Graphana username: admin"
+    echo "Graphana admin password:"
+    kubectl get secret --namespace monitoring my-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+   
     echo ""
     local end_time=$(date +%s)
     local elapsed=$((end_time - start_time))

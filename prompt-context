@@ -1,0 +1,13 @@
+BOLD='\[\e[1m\]'
+RESET='\[\e[0m\]'
+
+# Kubernetes context adını al
+function kube_ps1() {
+  local KUBE_CONTEXT=$(kubectl config current-context 2>/dev/null)
+  if [ -n "$KUBE_CONTEXT" ]; then
+    echo "($KUBE_CONTEXT)"
+  fi
+}
+
+# PS1 değişkeni
+export PS1="${BOLD}\u@\h${RESET} \$(kube_ps1):\w\$ "
