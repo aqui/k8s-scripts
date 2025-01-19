@@ -167,6 +167,11 @@ install_linkerd(){
     linkerd viz install | kubectl apply -f - # install the on-cluster metrics stack
     linkerd check
     wait_for_pods
+    linkerd viz install > linkerd-install.yaml
+    sed -i '/-enforced-host=/d' linkerd-install.yaml
+    kubectl apply -f linkerd-install.yaml
+    kubectl patch svc web -n linkerd-viz -p '{"spec": {"type": "NodePort", "ports": [{"port": 8084, "targetPort": 8084, "nodePort": 30084}]}}'
+    kubectl patch svc web -n linkerd-viz -p '{"spec": {"type": "NodePort", "ports": [{"port": 9994, "targetPort": 9994, "nodePort": 30994}]}}'
     #linkerd viz dashboard &
     print_message "Linkerd installed."
     measure_time $start_time
@@ -175,6 +180,8 @@ install_linkerd(){
 # Main function to execute the tasks
 main() {
     local start_time=$(date +%s)
+    MASTER_IP=$(hostname -I | awk '{print $1}')
+    export EDITOR=nano
     disable_firewall
     install_dependencies
     install_helm
@@ -186,8 +193,11 @@ main() {
     install_calico
     install_linkerd
     touch join_command
+    touch linkerd_addr    
     WORKER_JOIN=$(kubeadm token create --print-join-command)
-    echo "Worker join command:" "sudo" $WORKER_JOIN >> join_command
+    echo "sudo" $WORKER_JOIN > join_command
+    LINKERD_PORT=$(kubectl get svc -n linkerd-viz web -o jsonpath='{.spec.ports[0].nodePort}')
+    echo "Linkerd: http://$MASTER_IP:$LINKERD_PORT" > linkerd_addr
     local end_time=$(date +%s)
     local elapsed=$((end_time - start_time))
     local minutes=$((elapsed / 60))

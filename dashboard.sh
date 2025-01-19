@@ -22,6 +22,16 @@ print_message() {
     echo -e "\033[34m===========================\033[0m"
 }
 
+# Function to calculate and print execution time
+measure_time() {
+    local start_time=$1
+    local end_time=$(date +%s)
+    local elapsed=$((end_time - start_time))
+    local minutes=$((elapsed / 60))
+    local seconds=$((elapsed % 60))
+    echo -e "\033[32mTime taken: $minutes minutes and $seconds seconds\033[0m"
+}
+
 install_dashboard(){
     local start_time=$(date +%s)
     print_message "Installing Kubernetes Dashboard..."

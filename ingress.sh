@@ -1,4 +1,37 @@
 # Configure MetalLB
+
+# Wait for all pods in the given namespace to be running
+wait_for_pods() {
+    print_message "Checking if all pods in all namespaces are in a healthy state (Running, Succeeded, or Completed)..."
+    while true; do
+        # Pods that are not in Running, Succeeded, or Completed status in any namespace
+        PODS=$(kubectl get pods --all-namespaces --field-selector=status.phase!=Running,status.phase!=Succeeded,status.phase!=Completed --no-headers)
+        if [ -z "$PODS" ]; then
+            print_message "All pods in all namespaces are in a healthy state."
+            break
+        fi
+        sleep 5
+    done
+}
+
+# Function to print colored messages
+print_message() {
+    local message=$1
+    echo -e "\033[34m===========================\033[0m"
+    echo -e "\033[34m$message\033[0m"
+    echo -e "\033[34m===========================\033[0m"
+}
+
+# Function to calculate and print execution time
+measure_time() {
+    local start_time=$1
+    local end_time=$(date +%s)
+    local elapsed=$((end_time - start_time))
+    local minutes=$((elapsed / 60))
+    local seconds=$((elapsed % 60))
+    echo -e "\033[32mTime taken: $minutes minutes and $seconds seconds\033[0m"
+}
+
 configure_metallb() {
     local start_time=$(date +%s)
     print_message "Configuring MetalLB..."
