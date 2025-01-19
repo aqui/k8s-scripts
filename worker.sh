@@ -2,7 +2,7 @@
 
 # Ortak işlemler: Master ve Worker node'lar için geçerli komutlar
 
-#multipass delete worker && multipass purge && multipass launch 24.04 --name worker -c 2 -m 2G -d 10G && multipass shell worker
+#multipass delete worker && multipass purge && multipass launch 24.04 --name worker -c 2 -m 4G -d 10G && multipass shell worker
 
 # Function to print colored messages
 print_message() {

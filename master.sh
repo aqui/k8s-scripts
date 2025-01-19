@@ -1,6 +1,20 @@
 #!/bin/bash
 
-#multipass delete master && multipass purge && multipass launch 24.04 --name master -c 5 -m 14G -d 30G && multipass shell master
+#multipass delete master && multipass purge && multipass launch 24.04 --name master -c 2 -m 8G -d 30G && multipass shell master
+
+# Wait for all pods in the given namespace to be running
+wait_for_pods() {
+    print_message "Checking if all pods in all namespaces are in a healthy state (Running, Succeeded, or Completed)..."
+    while true; do
+        # Pods that are not in Running, Succeeded, or Completed status in any namespace
+        PODS=$(kubectl get pods --all-namespaces --field-selector=status.phase!=Running,status.phase!=Succeeded,status.phase!=Completed --no-headers)
+        if [ -z "$PODS" ]; then
+            print_message "All pods in all namespaces are in a healthy state."
+            break
+        fi
+        sleep 5
+    done
+}
 
 # Function to print colored messages
 print_message() {
@@ -140,149 +154,27 @@ install_calico() {
     measure_time $start_time
 }
 
-# Wait for all pods in the given namespace to be running
-wait_for_pods() {
-    print_message "Checking if all pods in all namespaces are in a healthy state (Running, Succeeded, or Completed)..."
-    while true; do
-        # Pods that are not in Running, Succeeded, or Completed status in any namespace
-        PODS=$(kubectl get pods --all-namespaces --field-selector=status.phase!=Running,status.phase!=Succeeded,status.phase!=Completed --no-headers)
-        if [ -z "$PODS" ]; then
-            print_message "All pods in all namespaces are in a healthy state."
-            break
-        fi
-        sleep 5
-    done
-}
-
-# Configure MetalLB
-configure_metallb() {
+install_linkerd(){
     local start_time=$(date +%s)
-    print_message "Configuring MetalLB..."
-    kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.9/config/manifests/metallb-native.yaml
-    print_message "Waiting for MetalLB pods to be up..."
+    print_message "Installing Linkerd..."
+    curl --proto '=https' --tlsv1.2 -sSfL https://run.linkerd.io/install-edge | sh
+    export PATH=$HOME/.linkerd2/bin:$PATH
+    linkerd version
+    linkerd check --pre
+    linkerd install --crds | kubectl apply -f -
+    linkerd install | kubectl apply -f -
+    linkerd check
+    linkerd viz install | kubectl apply -f - # install the on-cluster metrics stack
+    linkerd check
     wait_for_pods
-    cat <<EOF | kubectl apply -f -
-apiVersion: metallb.io/v1beta1
-kind: IPAddressPool
-metadata:
-  name: default
-  namespace: metallb-system
-spec:
-  addresses:
-  - $1
----
-apiVersion: metallb.io/v1beta1
-kind: L2Advertisement
-metadata:
-  name: default
-  namespace: metallb-system
-spec:
-  ipAddressPools:
-  - default
-EOF
-    print_message "MetalLB configured."
-    measure_time $start_time
-}
-
-# Install NGINX Ingress and apply example Ingress
-install_ingress() {
-    local start_time=$(date +%s)
-    print_message "Installing NGINX Ingress..."
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
-    wait_for_pods
-    print_message "Waiting for NGINX Ingress pods to be up..."
-    kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{"spec": {"type": "LoadBalancer"}}'
-    print_message "NGINX Ingress Controller installed."
-    measure_time $start_time
-}
-
-install_monitoring() {
-    local start_time=$(date +%s)
-    kubectl create namespace monitoring
-    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-    helm repo update
-    helm install kubeprostack --namespace monitoring prometheus-community/kube-prometheus-stack
-    print_message "Waiting for monitoring pods to be up..."
-    wait_for_pods
-    #kubectl --namespace monitoring port-forward svc/kubeprostack-kube-promethe-prometheus 9090
-    #kubectl --namespace monitoring port-forward svc/kubeprostack-kube-promethe-alertmanager 9093
-    #kubectl --namespace monitoring port-forward svc/kubeprostack-grafana 8080:80
-    kubectl patch svc kubeprostack-kube-promethe-prometheus -n monitoring -p '{"spec": {"type": "NodePort", "ports": [{"port": 9090, "nodePort": 30090}]}}'
-    kubectl patch svc kubeprostack-kube-promethe-alertmanager -n monitoring -p '{"spec": {"type": "NodePort", "ports": [{"port": 9093, "nodePort": 30093}]}}'
-    kubectl patch svc kubeprostack-grafana -n monitoring -p '{"spec": {"type": "NodePort", "ports": [{"port": 80, "nodePort": 30080}]}}'
-cat <<EOF | kubectl apply -f -
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  namespace: monitoring
-  name: prometheus-role
-rules:
-  - apiGroups: [""]
-    resources:
-      - pods
-      - services
-      - endpoints
-      - nodes
-      - nodes/proxy
-      - configmaps
-    verbs: ["get", "list", "watch"]
-EOF
-cat <<EOF | kubectl apply -f -
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: prometheus-rolebinding
-  namespace: monitoring
-subjects:
-  - kind: ServiceAccount
-    name: default
-    namespace: monitoring
-roleRef:
-  kind: Role
-  name: prometheus-role
-  apiGroup: rbac.authorization.k8s.io
-EOF
-    #kubectl get secret kubeprostack-grafana -n monitoring -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
-    measure_time $start_time
-}
-
-install_dashboard(){
-    local start_time=$(date +%s)
-    print_message "Installing Kubernetes Dashboard..."
-    helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
-    helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
-    wait_for_pods
-    #kubectl patch svc kubernetes-dashboard-web -n kubernetes-dashboard -p '{"spec": {"type": "NodePort"}}'
-    kubectl patch svc kubernetes-dashboard-kong-proxy -n kubernetes-dashboard -p '{"spec": {"type": "NodePort"}}'
-cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: admin-user
-  namespace: kubernetes-dashboard
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: admin-user
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cluster-admin
-subjects:
-- kind: ServiceAccount
-  name: admin-user
-  namespace: kubernetes-dashboard
-EOF
-    kubectl -n kubernetes-dashboard create token admin-user
-    print_message "Kubernetes Dashboard installed."
+    #linkerd viz dashboard &
+    print_message "Linkerd installed."
     measure_time $start_time
 }
 
 # Main function to execute the tasks
 main() {
     local start_time=$(date +%s)
-    MASTER_IP=$(hostname -I | awk '{print $1}')
     disable_firewall
     install_dependencies
     install_helm
@@ -292,38 +184,16 @@ main() {
     install_kubernetes
     initialize_master
     install_calico
-    configure_metallb "${MASTER_IP}-${MASTER_IP}"
-    install_ingress
-    install_monitoring
-    install_dashboard 
-    kubectl get pods -A --field-selector=status.phase=Succeeded -o custom-columns="NAMESPACE:.metadata.namespace,NAME:.metadata.name" --no-headers | awk '{print "kubectl delete pod -n "$1" "$2}' | sh
-    local end_time=$(date +%s)
-    local elapsed=$((end_time - start_time))
-    local minutes=$((elapsed / 60))
-    local seconds=$((elapsed % 60))
-    GRAFANA_PORT=$(kubectl get svc -n monitoring kubeprostack-grafana -o jsonpath='{.spec.ports[0].nodePort}')
-    PROMETHEUS_PORT=$(kubectl get svc -n monitoring kubeprostack-kube-promethe-prometheus -o jsonpath='{.spec.ports[0].nodePort}')
-    ALERTMANAGER_PORT=$(kubectl get svc -n monitoring kubeprostack-kube-promethe-alertmanager -o jsonpath='{.spec.ports[0].nodePort}')
-    DASHBOARD_PORT=$(kubectl get svc -n kubernetes-dashboard kubernetes-dashboard-kong-proxy -o jsonpath='{.spec.ports[0].nodePort}')
+    install_linkerd
+    touch join_command
     WORKER_JOIN=$(kubeadm token create --print-join-command)
-    DASHBOARD_TOKEN=$(kubectl -n kubernetes-dashboard create token admin-user)
-    print_message "Shogun says:"
-    touch app_ip_addr
-    echo "Grafana: http://$MASTER_IP:$GRAFANA_PORT" > app_ip_addr
-    echo "Grafana username: admin" >> app_ip_addr
-    echo "Grafana password: prom-operator" >> app_ip_addr
-    echo "Prometheus: http://$MASTER_IP:$PROMETHEUS_PORT" >> app_ip_addr
-    echo "Alert Manager: http://$MASTER_IP:$ALERTMANAGER_PORT" >> app_ip_addr
-    echo "Dashboard: https://$MASTER_IP:$DASHBOARD_PORT" >> app_ip_addr
-    echo "" >> app_ip_addr
-    echo "Dashboard Bearer Token: $DASHBOARD_TOKEN" >> app_ip_addr
-    echo "" >> app_ip_addr
-    echo "Worker join command:" $WORKER_JOIN >> app_ip_addr
+    echo "Worker join command:" "sudo" $WORKER_JOIN >> join_command
     local end_time=$(date +%s)
     local elapsed=$((end_time - start_time))
     local minutes=$((elapsed / 60))
     local seconds=$((elapsed % 60))
     echo "Total script execution time: $minutes minutes and $seconds seconds"
+    kubectl get pods -A --field-selector=status.phase=Succeeded -o custom-columns="NAMESPACE:.metadata.namespace,NAME:.metadata.name" --no-headers | awk '{print "kubectl delete pod -n "$1" "$2}' | sh
     print_message "All set"
 }
 
