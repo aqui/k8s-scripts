@@ -70,11 +70,12 @@ main(){
     MASTER_IP=$(hostname -I | awk '{print $1}')
     install_dashboard
     DASHBOARD_PORT=$(kubectl get svc -n kubernetes-dashboard kubernetes-dashboard-kong-proxy -o jsonpath='{.spec.ports[0].nodePort}')
+    DASHBOARD_TOKEN=$(kubectl create token admin-user -n kubernetes-dashboard)
     print_message "Shogun says:"
     touch dashboard_addr
     echo "Dashboard: https://$MASTER_IP:$DASHBOARD_PORT" >> dashboard_addr
     echo "" >> dashboard_addr
-    echo "Dashboard Bearer Token: $DASHBOARD_TOKEN" >> dashboard_addr
+    echo $DASHBOARD_TOKEN >> dashboard_addr
     echo "" >> dashboard_addr
     local end_time=$(date +%s)
     local elapsed=$((end_time - start_time))

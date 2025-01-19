@@ -158,7 +158,7 @@ install_linkerd(){
     local start_time=$(date +%s)
     print_message "Installing Linkerd..."
     curl --proto '=https' --tlsv1.2 -sSfL https://run.linkerd.io/install-edge | sh
-    export PATH=$HOME/.linkerd2/bin:$PATH
+    echo 'export PATH=$HOME/.linkerd2/bin:$PATH' >> ~/.bashrc && source ~/.bashrc
     linkerd version
     linkerd check --pre
     linkerd install --crds | kubectl apply -f -
