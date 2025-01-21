@@ -86,15 +86,9 @@ main(){
     local start_time=$(date +%s)
     MASTER_IP=$(hostname -I | awk '{print $1}')
     install_monitoring
-    install_dashboard 
-    kubectl get pods -A --field-selector=status.phase=Succeeded -o custom-columns="NAMESPACE:.metadata.namespace,NAME:.metadata.name" --no-headers | awk '{print "kubectl delete pod -n "$1" "$2}' | sh
     GRAFANA_PORT=$(kubectl get svc -n monitoring kubeprostack-grafana -o jsonpath='{.spec.ports[0].nodePort}')
     PROMETHEUS_PORT=$(kubectl get svc -n monitoring kubeprostack-kube-promethe-prometheus -o jsonpath='{.spec.ports[0].nodePort}')
     ALERTMANAGER_PORT=$(kubectl get svc -n monitoring kubeprostack-kube-promethe-alertmanager -o jsonpath='{.spec.ports[0].nodePort}')
-    DASHBOARD_PORT=$(kubectl get svc -n kubernetes-dashboard kubernetes-dashboard-kong-proxy -o jsonpath='{.spec.ports[0].nodePort}')
-    WORKER_JOIN=$(kubeadm token create --print-join-command)
-    DASHBOARD_TOKEN=$(kubectl -n kubernetes-dashboard create token admin-user)
-    KIBANA_PORT=$(kubectl get svc -n efk-stack kibana -o jsonpath='{.spec.ports[0].nodePort}')
     print_message "Shogun says:"
     touch monitoring_addr
     echo "Grafana: http://$MASTER_IP:$GRAFANA_PORT" > monitoring_addr
@@ -108,6 +102,7 @@ main(){
     local minutes=$((elapsed / 60))
     local seconds=$((elapsed % 60))
     echo "Total script execution time: $minutes minutes and $seconds seconds"
+    kubectl get pods -A --field-selector=status.phase=Succeeded -o custom-columns="NAMESPACE:.metadata.namespace,NAME:.metadata.name" --no-headers | awk '{print "kubectl delete pod -n "$1" "$2}' | sh
     print_message "All set"
 }
 

@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  jboss:
+    build: .
+    container_name: jboss-4.2.2
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+      - "1099:1099"
+      - "4444:4444"
+      - "4445:4445"
+      - "8009:8009"
+    environment:
+      - JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk
+      - JBOSS_HOME=/opt/jboss-4.2.2.GA
+    volumes:
+      - ./deployments:/opt/jboss-4.2.2.GA/server/default/deploy
+    restart: unless-stopped
+

@@ -70,18 +70,15 @@ configure_kernel() {
     print_message "Configuring kernel modules..."
     sudo modprobe overlay
     sudo modprobe br_netfilter
-
-    cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
 overlay
 br_netfilter
 EOF
-
-    cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-iptables  = 1
 net.bridge.bridge-nf-call-ip6tables = 1
 net.ipv4.ip_forward                 = 1
 EOF
-
     sudo sysctl --system
     print_message "Kernel modules configured."
     measure_time $start_time
@@ -132,6 +129,9 @@ initialize_master() {
     local start_time=$(date +%s)
     print_message "Initializing Kubernetes master node..."
     MASTER_IP=$(hostname -I | awk '{print $1}')
+    #--kubernetes-version=1.31.0
+    #--ignore-preflight-errors=NumCPU
+    #--ignore-preflight-errors=Mem
     sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address="$MASTER_IP" --control-plane-endpoint="$MASTER_IP" --ignore-preflight-errors=Swap
     mkdir -p $HOME/.kube
     sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
@@ -173,6 +173,7 @@ install_linkerd(){
     kubectl patch svc web -n linkerd-viz -p '{"spec": {"type": "NodePort", "ports": [{"port": 8084, "targetPort": 8084, "nodePort": 30084}]}}'
     kubectl patch svc web -n linkerd-viz -p '{"spec": {"type": "NodePort", "ports": [{"port": 9994, "targetPort": 9994, "nodePort": 30994}]}}'
     #linkerd viz dashboard &
+    #kubectl get -n kubernetes-dashboard deploy -o yaml | linkerd inject - | kubectl apply -f -
     print_message "Linkerd installed."
     measure_time $start_time
 }
